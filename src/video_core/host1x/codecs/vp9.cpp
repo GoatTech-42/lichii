@@ -439,12 +439,15 @@ Vp9FrameContainer VP9::GetCurrentFrame() {
         if (!host1x.gmmu_manager.IsRangeWithinGPUAddressSpace(regs.frame_bitstream_offset.Address(),
                                                               current_frame.info.bitstream_size)) {
             // The size is the guest's: past the address space the read would serve zeros.
+            // Rotate the submission through the queue with an empty payload rather than
+            // returning early, so the pending frame keeps its pairing with this
+            // submission's registers; the empty slot is dropped when it comes due.
             LOG_ERROR(HW_GPU, "VP9 bitstream of {} bytes at {:#x} is outside the GPU address space",
                       current_frame.info.bitstream_size, regs.frame_bitstream_offset.Address());
-            return current_frame;
+        } else {
+            current_frame.bit_stream.resize(current_frame.info.bitstream_size);
+            host1x.gmmu_manager.ReadBlock(regs.frame_bitstream_offset.Address(), current_frame.bit_stream.data(), current_frame.info.bitstream_size);
         }
-        current_frame.bit_stream.resize(current_frame.info.bitstream_size);
-        host1x.gmmu_manager.ReadBlock(regs.frame_bitstream_offset.Address(), current_frame.bit_stream.data(), current_frame.info.bitstream_size);
     }
     if (!next_frame.bit_stream.empty()) {
         Vp9FrameContainer temp{
